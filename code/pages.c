@@ -1,41 +1,37 @@
+#include "pages.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <dirent.h>
 
 #define FILE_TYPE 8
 
+struct BufferedPage {
+    char *const original_name;
+    char *new_name;
+};
+
+struct BufferedPage * pages;
+
 
 int countFiles(const char *const path);
 void sortPaths(const struct dirent ** list_of_files, const unsigned int len);
 
-// `start` та `end` мають бути дійсними номерами сторінок
-void movePartPages(const char *const path, const unsigned int start, const unsigned int end, const unsigned int amount);
-
-
-int main(const int argc, const char *const *const argv) {
-    const char *const test_dir = argv[1];
-
+void development_tests(const char *const test_dir)
+{
     movePartPages(test_dir, 0, 5, +1);
-    if (argc <= 1) {
-        return 0;
+    return;
+
+    DIR *const dir = opendir(test_dir);
+    const struct dirent *de;
+    while ((de = readdir(dir)) != NULL) {
+        printf("%s -> %i\n", de->d_name, de->d_type);
     }
-    return 0;
-
-    for (int i = 1; i < argc; i++) {
-        DIR *const dir = opendir(argv[i]);
-
-        const struct dirent *de;
-        while ((de = readdir(dir)) != NULL) {
-            printf("%s -> %i\n", de->d_name, de->d_type);
-        }
-        printf("\n");
-
-        closedir(dir);
-    }
-
-    return 0;
+    printf("\n");
+    closedir(dir);
 }
 
 int countFiles(const char *const path)

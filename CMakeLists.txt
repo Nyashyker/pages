@@ -13,5 +13,9 @@ project(
 	DESCRIPTION "Zrucxne peremisxcxennqa storinok cxerez terminal"
 	LANGUAGES C
 )
-add_executable(pages.o code/pages.c)
+
+add_executable(pages
+	code/pages.c
+	code/main.c
+)
 
