@@ -1,6 +1,14 @@
-// NOTE: temporal
-void development_tests(const char *const test_dir);
+#include <stdlib.h>
+#include <stdio.h>
+
+
+// Відкриває
+void openPages(const char *const path);
+// Утілює і закриває за собою
+void applyPages();
+// Закриває без втілення
+void closePages();
 
 // `start` та `end` мають бути дійсними номерами сторінок
-void movePartPages(const char *const path, const unsigned int start, const unsigned int end, const unsigned int amount);
+void movePartPages(const size_t start, const size_t end, const size_t amount);
 

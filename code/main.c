@@ -13,8 +13,13 @@
 
 int main(const int argc, const char *const *const argv)
 {
-	if (argc <= 1) { return 1; }
-	development_tests(argv[1]);
+	if (argc <= 1) {
+		fprintf(stderr, "You have to provide a folder\n");
+		return 1;
+	}
+	openPages(argv[1]);
+	//applyPages();
+	closePages();
 
 	return 0;
 }
