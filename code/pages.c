@@ -123,6 +123,9 @@ void sortPaths()
 				const char bubble = pages[i].original_name[check_symbol];
 				const char water = pages[i+1].original_name[check_symbol];
 				if (bubble == water) { continue; }
+				// TODO: Upgrade sorting ordering
+				// https://en.m.wikipedia.org/wiki/Natural_sort_order
+				// AND: fix cyrilic ordering
 				if (bubble != '\0')
 				{
 					if (water == '\0' || bubble > water) {
