@@ -13,12 +13,11 @@
 
 int main(const int argc, const char *const *const argv)
 {
-	if (argc <= 1) {
-		fprintf(stderr, "You have to provide a folder\n");
+	if (argc <= 2) {
+		fprintf(stderr, "You have to provide a folder & type\n");
 		return 1;
 	}
-	openPages(argv[1]);
-	//applyPages();
+	openPages(argv[1], argv[2]);
 	closePages();
 
 	return 0;

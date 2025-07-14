@@ -1,63 +1,85 @@
 #include "pages.h"
-#include <stddef.h>
 #define DEBUG_PAGES
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 
-
-#define FILE_TYPE 8
-//#include <linux/limits.h>
-// PATH_MAX
 
 struct BufferedPage {
 	const char *original_name;
 	char *new_name;
 };
 
-DIR *dir = NULL;
-const char *folder = NULL;
+char *folder = NULL;
+size_t path_len = 0;
 struct BufferedPage *pages = NULL;
 size_t pg_count = 0;
 
 
+// Повертає `true`, якщо dirent повернув файл
+// ! повертає `false`, якщо виникає помилка
+// ! `path_len == 0` - означає помилку
+bool isFile(const unsigned char type, const char *const name);
 // Повертає кількість файлів у теці
-void countFiles();
+size_t countFiles(DIR *const dir);
 // Витягує назви файлів
 // (кількість має бути вже знайдена)
 // ! якщо файли пораховані неправильно, продовжувати неможна !
-void getFilesNames();
-// Сортуємо за назвою (buble sort)
-void sortPaths();
+void getFilesNames(DIR *const dir);
+// Сортуємо за ориґінальною назвою (buble sort)
+void sortPaths(const size_t type_len);
 // Виводить список `pages`
 void showPages();
 
 
-void openPages(const char *const path)
+void openPages(const char *const path, const char *const type)
 {
-	folder = path;
+	closePages(); // In case of double opening
 #ifdef DEBUG_PAGES
-	printf("Folder: %s\n", path);
+	printf("\tOpening Pages\n");
 #endif
-	dir = opendir(path);
-	if (dir == NULL) { fprintf(stderr, "ERROR: The dirrectory can not be open!\n"); closePages(); return; }
+	if (path == NULL) { fprintf(stderr, "ERROR: A path has to be provided!\n"); return; }
+	if (type == NULL) { fprintf(stderr, "ERROR: A type has to be provided (but may be empty)\n"); return; }
 
-	countFiles();
-	if (pg_count == 0) { fprintf(stderr, "ERROR: The dirrectory has not files in it.\n"); closePages(); return; }
+	path_len = strlen(path);
+	if (path_len == 0) { fprintf(stderr, "ERROR: Path to the dirrectory has to be not empty!\n"); return; }
+	if (path_len > PATH_MAX) { fprintf(stderr, "ERROR: Path to the dirrectory is to long (>%u)!\n", PATH_MAX); return; }
+	if (strlen(type) > NAME_MAX) { fprintf(stderr, "ERROR: Type of files is to long (>%u)!\n", NAME_MAX); return; }
+	if (type[0] != '.') { fprintf(stderr, "ERROR: Type has to start from `.`!\n"); return; }
+
+	DIR *dir = opendir(path);
+	if (dir == NULL) { fprintf(stderr, "ERROR: The dirrectory can not be open!\n"); return; }
+
+	//  TODO: path has to ALWAYS end on /
+	folder = malloc((path_len + NAME_MAX + 1) * sizeof(char));
+	if (folder == NULL) { fprintf(stderr, "ERROR: Out of memory for path\n"); closedir(dir); return; }
+	strlcpy(folder, path, path_len + 1);
+#ifdef DEBUG_PAGES
+	printf("Folder: '%s'\n", path);
+	printf("Type: '%s'\n", type);
+#endif
+
+	pg_count = countFiles(dir);
+	if (path_len == 0) { closedir(dir); return; }
+	if (pg_count == 0) { fprintf(stderr, "ERROR: The dirrectory has no files in it.\n"); closedir(dir); closePages(); return; }
+	rewinddir(dir);
 #ifdef DEBUG_PAGES
 	printf("Files found: %zu\n", pg_count);
 #endif
 
-	getFilesNames();
-	if (dir == NULL) { /* Already notified & closed */ return; }
+	getFilesNames(dir);
+	closedir(dir);
+	if (path_len == 0) { /* Already notified & closed */ return; }
 #ifdef DEBUG_PAGES
 	showPages();
 #endif
 
-	sortPaths();
+	sortPaths(strnlen(type, NAME_MAX));
 #ifdef DEBUG_PAGES
 	showPages();
 #endif
@@ -65,76 +87,114 @@ void openPages(const char *const path)
 
 void applyPages()
 {
-	// TODO: do the applying
+	//  TODO: do the applying
 	closePages();
 }
 
 void closePages()
 {
-	if (dir != NULL) { closedir(dir); }
-	folder = NULL;
-	if (pages != NULL) { free(pages); }
+#ifdef DEBUG_PAGES
+	printf("\tClosing Pages\n");
+#endif
+	if (folder != NULL) {
+		free(folder);
+		folder = NULL;
+	}
+	path_len = 0;
+	if (pages != NULL) {
+		for (size_t i = 0; i < pg_count; i++) { free(pages[i].new_name); }
+		free(pages);
+		pages = NULL;
+	}
 	pg_count = 0;
 }
 
 
-void countFiles()
+bool isFile(const unsigned char type, const char *const name)
 {
-	const struct dirent *de;
-	while ((de = readdir(dir)) != NULL) {
-		if (de->d_type == FILE_TYPE) {
-			pg_count++;
+	if (type == DT_REG) {
+		return true;
+	} else if (type == DT_UNKNOWN) {
+		struct stat sb;
+		strlcpy(folder + path_len, name, NAME_MAX);
+		if (stat(folder, &sb) == -1) { fprintf(stderr, "ERROR: Can not indentify dir-entity\n"); closePages(); return false; }
+		if ((sb.st_mode & S_IFMT) == S_IFREG) {
+			return true;
 		}
 	}
-	rewinddir(dir);
+	return false;
 }
 
-void getFilesNames()
+size_t countFiles(DIR *const dir)
+{
+	size_t count = 0;
+	const struct dirent *de;
+	while ((de = readdir(dir)) != NULL) {
+		if (isFile(de->d_type, de->d_name)) {
+			count++;
+		}
+		if (path_len == 0) { return 0; }
+	}
+	return count;
+}
+
+void getFilesNames(DIR *const dir)
 {
 	pages = malloc(pg_count * sizeof(struct BufferedPage));
 	size_t i = 0;
 	const struct dirent *de;
 	while ((de = readdir(dir)) != NULL)
 	{
-		if (de->d_type == FILE_TYPE) {
-			if (i >= pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded more then counted)\n"); closePages(); return; }
-			pages[i].original_name = de->d_name;
-		#ifdef DEBUG_PAGES
-			printf("File: %s\n", pages[i].original_name);
-		#endif
-			const size_t len = strnlen(de->d_name, MAXNAMLEN);
-			pages[i].new_name = malloc(MAXNAMLEN * sizeof(char));
-			strlcpy(pages[i].new_name, de->d_name, MAXNAMLEN);
-			i++;
+		if (!isFile(de->d_type, de->d_name)) {
+			if (path_len == 0) { return; }
+			else { continue; }
 		}
+		if (i >= pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded more then counted)\n"); closePages(); return; }
+		pages[i].original_name = de->d_name;
+	#ifdef DEBUG_PAGES
+		printf("File: %s\n", pages[i].original_name);
+	#endif
+		const size_t len = strnlen(de->d_name, NAME_MAX);
+		pages[i].new_name = malloc(NAME_MAX * sizeof(char));
+		strlcpy(pages[i].new_name, de->d_name, len < NAME_MAX ? len + 1 : NAME_MAX);
+		i++;
 	}
-	if (i != pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded less then counted)\n"); closePages(); return; }
-	rewinddir(dir);
+	if (i < pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded less then counted)\n"); pg_count = i; closePages(); return; }
 }
 
 
-void sortPaths()
+void sortPaths(size_t type_len)
 {
-	if (pages == NULL) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
+	if (pg_count == 0) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
 	for (size_t left = pg_count - 1; left > 0; left--) {
 		for (size_t i = 0; i < left; i++) {
-			for (size_t check_symbol = 0; check_symbol < MAXNAMLEN; check_symbol++)
+			// TODO: Support preffix & suffix
+			const size_t bubble_len = strnlen(pages[i].original_name, NAME_MAX);
+			const size_t water_len = strnlen(pages[i+1].original_name, NAME_MAX);
+			if (bubble_len != water_len) {
+				// Shorter from start
+				if (bubble_len > water_len) {
+					const struct BufferedPage tmp = pages[i + 1];
+					pages[i + 1] = pages[i];
+					pages[i] = tmp;
+				}
+				continue;
+			}
+			for (size_t check_symbol = 0; check_symbol < bubble_len - type_len; check_symbol++)
 			{
 				const char bubble = pages[i].original_name[check_symbol];
 				const char water = pages[i+1].original_name[check_symbol];
-				if (bubble == water) { continue; }
 				// TODO: Upgrade sorting ordering
 				// https://en.m.wikipedia.org/wiki/Natural_sort_order
 				// AND: fix cyrilic ordering
-				if (bubble != '\0')
-				{
-					if (water == '\0' || bubble > water) {
+				if (bubble != water) {
+					if (bubble > water) {
 						const struct BufferedPage tmp = pages[i + 1];
 						pages[i + 1] = pages[i];
 						pages[i] = tmp;
 					}
+					break;
 				}
-				break;
 			}
 		}
 	}
@@ -152,7 +212,7 @@ void showPages()
 
 void movePartPages(const size_t start, const size_t end, const size_t amount)
 {
-	if (pages == NULL) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
+	if (pg_count == 0) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
 	if (start > end) { fprintf(stderr, "ERROR: `start` must be before `end`\n"); return; }
 
 	// TODO: the logic

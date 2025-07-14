@@ -3,7 +3,7 @@
 
 
 // Відкриває
-void openPages(const char *const path);
+void openPages(const char *const path, const char *const type);
 // Утілює і закриває за собою
 void applyPages();
 // Закриває без втілення
