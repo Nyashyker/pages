@@ -1,4 +1,5 @@
 #include "pages.h"
+#include <stddef.h>
 #define DEBUG_PAGES
 
 #include <stdint.h>
@@ -12,7 +13,9 @@
 
 struct BufferedPage {
 	const char *original_name;
-	char *new_name;
+	//char *new_name;
+	int order;
+	bool changed /* = false */ ;
 };
 
 char *folder = NULL;
@@ -23,7 +26,7 @@ size_t pg_count = 0;
 
 // Повертає `true`, якщо dirent повернув файл
 // ! повертає `false`, якщо виникає помилка
-// ! `path_len == 0` - означає помилку
+// ! `folder == NULL` - означає помилку
 bool isFile(const unsigned char type, const char *const name);
 // Повертає кількість файлів у теці
 size_t countFiles(DIR *const dir);
@@ -47,18 +50,23 @@ void openPages(const char *const path, const char *const type)
 	if (type == NULL) { fprintf(stderr, "ERROR: A type has to be provided (but may be empty)\n"); return; }
 
 	path_len = strlen(path);
-	if (path_len == 0) { fprintf(stderr, "ERROR: Path to the dirrectory has to be not empty!\n"); return; }
-	if (path_len > PATH_MAX) { fprintf(stderr, "ERROR: Path to the dirrectory is to long (>%u)!\n", PATH_MAX); return; }
-	if (strlen(type) > NAME_MAX) { fprintf(stderr, "ERROR: Type of files is to long (>%u)!\n", NAME_MAX); return; }
-	if (type[0] != '.') { fprintf(stderr, "ERROR: Type has to start from `.`!\n"); return; }
+	if (path_len == 0) { fprintf(stderr, "ERROR: Path to the dirrectory has to be not empty!\n"); path_len = 0; return; }
+	if (path_len > PATH_MAX) { fprintf(stderr, "ERROR: Path to the dirrectory is to long (>%u)!\n", PATH_MAX); path_len = 0; return; }
+	if (strlen(type) > NAME_MAX) { fprintf(stderr, "ERROR: Type of files is to long (>%u)!\n", NAME_MAX); path_len = 0; return; }
+	if (type[0] != '.') { fprintf(stderr, "ERROR: Type has to start from `.`!\n"); path_len = 0; return; }
 
 	DIR *dir = opendir(path);
-	if (dir == NULL) { fprintf(stderr, "ERROR: The dirrectory can not be open!\n"); return; }
+	if (dir == NULL) { fprintf(stderr, "ERROR: The dirrectory can not be open!\n"); path_len = 0; return; }
 
 	//  TODO: path has to ALWAYS end on /
-	folder = malloc((path_len + NAME_MAX + 1) * sizeof(char));
+	const bool added_path_separator = path[path_len-1] != '/' && path[path_len-1] != '\\';
+	folder = malloc((path_len + NAME_MAX + added_path_separator) * sizeof(char));
 	if (folder == NULL) { fprintf(stderr, "ERROR: Out of memory for path\n"); closedir(dir); return; }
-	strlcpy(folder, path, path_len + 1);
+	strlcpy(folder, path, path_len);
+	if (added_path_separator) {
+		folder[path_len-1] = '/';
+		folder[path_len] = '\0';
+	}
 #ifdef DEBUG_PAGES
 	printf("Folder: '%s'\n", path);
 	printf("Type: '%s'\n", type);
@@ -74,7 +82,7 @@ void openPages(const char *const path, const char *const type)
 
 	getFilesNames(dir);
 	closedir(dir);
-	if (path_len == 0) { /* Already notified & closed */ return; }
+	if (folder == NULL) { /* Already notified & closed */ return; }
 #ifdef DEBUG_PAGES
 	showPages();
 #endif
@@ -102,7 +110,6 @@ void closePages()
 	}
 	path_len = 0;
 	if (pages != NULL) {
-		for (size_t i = 0; i < pg_count; i++) { free(pages[i].new_name); }
 		free(pages);
 		pages = NULL;
 	}
@@ -130,10 +137,11 @@ size_t countFiles(DIR *const dir)
 	size_t count = 0;
 	const struct dirent *de;
 	while ((de = readdir(dir)) != NULL) {
+		if (de->d_name[0] == '.') { continue; }
 		if (isFile(de->d_type, de->d_name)) {
 			count++;
-		}
-		if (path_len == 0) { return 0; }
+		} else
+		if (folder == NULL) { /* Already notified & closed */ return 0; }
 	}
 	return count;
 }
@@ -145,18 +153,33 @@ void getFilesNames(DIR *const dir)
 	const struct dirent *de;
 	while ((de = readdir(dir)) != NULL)
 	{
+		if (de->d_name[0] == '.') { continue; }
 		if (!isFile(de->d_type, de->d_name)) {
-			if (path_len == 0) { return; }
+			if (folder == NULL) { /* Already notified & closed */ return; }
 			else { continue; }
 		}
 		if (i >= pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded more then counted)\n"); closePages(); return; }
+
 		pages[i].original_name = de->d_name;
+		pages[i].changed = false;
 	#ifdef DEBUG_PAGES
 		printf("File: %s\n", pages[i].original_name);
 	#endif
 		const size_t len = strnlen(de->d_name, NAME_MAX);
-		pages[i].new_name = malloc(NAME_MAX * sizeof(char));
-		strlcpy(pages[i].new_name, de->d_name, len < NAME_MAX ? len + 1 : NAME_MAX);
+		size_t suffix = len - 1;
+		for (; suffix > 0; suffix--) { if (de->d_name[suffix] == '.') { break; } }
+		const size_t the_name_len = len + 1 - (de->d_name[suffix] == '.' ? suffix : 0);
+		char *the_name = malloc(the_name_len * sizeof(char));
+		if (the_name == NULL) { fprintf(stderr, "ERROR: Not enough memory for name analysis\n"); closePages(); return; }
+		strlcpy(the_name, de->d_name, the_name_len);
+		const int order = atoi(the_name);
+		if (order == 0 && the_name[0] != '0') {
+			pages[i].order = i;
+		} else {
+			pages[i].order = order;
+		}
+		free(the_name);
+
 		i++;
 	}
 	if (i < pg_count) { fprintf(stderr, "ERROR: Files was counted badly (founded less then counted)\n"); pg_count = i; closePages(); return; }
@@ -204,7 +227,7 @@ void showPages()
 {
 	printf("Listed pages:\n");
 	for (size_t i = 0; i < pg_count; i++) {
-		printf("'%s' -> '%s'\n", pages[i].original_name, pages[i].new_name);
+		printf("'%s' -> %i%s\n", pages[i].original_name, pages[i].order, pages[i].changed?" +":"");
 	}
 	printf("\n");
 }
