@@ -10,5 +10,5 @@ void applyPages();
 void closePages();
 
 // `start` та `end` мають бути дійсними номерами сторінок
-void movePartPages(const size_t start, const size_t end, const size_t amount);
+void movePartPages(const size_t start, const size_t end, const int amount);
 

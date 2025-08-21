@@ -11,12 +11,12 @@
 #include <dirent.h>
 
 
-struct BufferedPage {
+typedef struct BufferedPage {
 	const char *original_name;
 	//char *new_name;
 	int order;
 	bool changed /* = false */ ;
-};
+} Page;
 
 char *folder = NULL;
 size_t path_len = 0;
@@ -58,17 +58,14 @@ void openPages(const char *const path, const char *const type)
 	DIR *dir = opendir(path);
 	if (dir == NULL) { fprintf(stderr, "ERROR: The dirrectory can not be open!\n"); path_len = 0; return; }
 
-	//  TODO: path has to ALWAYS end on /
 	const bool added_path_separator = path[path_len-1] != '/' && path[path_len-1] != '\\';
-	folder = malloc((path_len + NAME_MAX + added_path_separator) * sizeof(char));
-	if (folder == NULL) { fprintf(stderr, "ERROR: Out of memory for path\n"); closedir(dir); return; }
-	strlcpy(folder, path, path_len);
-	if (added_path_separator) {
-		folder[path_len-1] = '/';
-		folder[path_len] = '\0';
-	}
+	path_len += added_path_separator;
+	folder = malloc((path_len + NAME_MAX) * sizeof(char));
+	if (folder == NULL) { fprintf(stderr, "ERROR: Out of memory for path\n"); path_len = 0; closedir(dir); return; }
+	strncpy(folder, path, path_len - added_path_separator);
+	if (added_path_separator) { folder[path_len-1] = '/'; }
 #ifdef DEBUG_PAGES
-	printf("Folder: '%s'\n", path);
+	printf("Folder: '%s'\n", folder);
 	printf("Type: '%s'\n", type);
 #endif
 
@@ -87,10 +84,11 @@ void openPages(const char *const path, const char *const type)
 	showPages();
 #endif
 
-	sortPaths(strnlen(type, NAME_MAX));
-#ifdef DEBUG_PAGES
-	showPages();
-#endif
+	//  NOTE: sorting probably unnececary
+//	sortPaths(strnlen(type, NAME_MAX));
+//#ifdef DEBUG_PAGES
+//	showPages();
+//#endif
 }
 
 void applyPages()
@@ -174,7 +172,7 @@ void getFilesNames(DIR *const dir)
 		strlcpy(the_name, de->d_name, the_name_len);
 		const int order = atoi(the_name);
 		if (order == 0 && the_name[0] != '0') {
-			pages[i].order = i;
+			pages[i].order = -i - 1;
 		} else {
 			pages[i].order = order;
 		}
@@ -197,7 +195,7 @@ void sortPaths(size_t type_len)
 			if (bubble_len != water_len) {
 				// Shorter from start
 				if (bubble_len > water_len) {
-					const struct BufferedPage tmp = pages[i + 1];
+					const Page tmp = pages[i + 1];
 					pages[i + 1] = pages[i];
 					pages[i] = tmp;
 				}
@@ -212,7 +210,7 @@ void sortPaths(size_t type_len)
 				// AND: fix cyrilic ordering
 				if (bubble != water) {
 					if (bubble > water) {
-						const struct BufferedPage tmp = pages[i + 1];
+						const Page tmp = pages[i + 1];
 						pages[i + 1] = pages[i];
 						pages[i] = tmp;
 					}
@@ -227,17 +225,29 @@ void showPages()
 {
 	printf("Listed pages:\n");
 	for (size_t i = 0; i < pg_count; i++) {
-		printf("'%s' -> %i%s\n", pages[i].original_name, pages[i].order, pages[i].changed?" +":"");
+		printf("%zu.\t'%s' -> %i%s\n", i, pages[i].original_name, pages[i].order, pages[i].changed?" +":"");
 	}
 	printf("\n");
 }
 
 
-void movePartPages(const size_t start, const size_t end, const size_t amount)
+void movePartPages(const size_t start, const size_t end, const int amount)
 {
 	if (pg_count == 0) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
 	if (start > end) { fprintf(stderr, "ERROR: `start` must be before `end`\n"); return; }
 
-	// TODO: the logic
+	#ifdef DEBUG_PAGES
+		printf("\tMoving pages from %zu to %zu on %i\n", start, end, amount);
+	#endif
+	for (size_t i = 0; i < pg_count; i++)
+	{
+		if (pages[i].order >= start && pages[i].order <= end) {
+			pages[i].order += amount;
+		}
+	}
+	
+	#ifdef DEBUG_PAGES
+		showPages();
+	#endif
 }
 
