@@ -13,7 +13,6 @@
 
 typedef struct BufferedPage {
 	const char *original_name;
-	//char *new_name;
 	int order;
 	bool changed /* = false */ ;
 } Page;
@@ -83,12 +82,6 @@ void openPages(const char *const path, const char *const type)
 #ifdef DEBUG_PAGES
 	showPages();
 #endif
-
-	//  NOTE: sorting probably unnececary
-//	sortPaths(strnlen(type, NAME_MAX));
-//#ifdef DEBUG_PAGES
-//	showPages();
-//#endif
 }
 
 void applyPages()
@@ -231,6 +224,9 @@ void showPages()
 }
 
 
+// Raw version for inner use
+void _movePartPages(const size_t start, const size_t end, const int amount);
+
 void movePartPages(const size_t start, const size_t end, const int amount)
 {
 	if (pg_count == 0) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
@@ -239,15 +235,22 @@ void movePartPages(const size_t start, const size_t end, const int amount)
 	#ifdef DEBUG_PAGES
 		printf("\tMoving pages from %zu to %zu on %i\n", start, end, amount);
 	#endif
-	for (size_t i = 0; i < pg_count; i++)
-	{
-		if (pages[i].order >= start && pages[i].order <= end) {
-			pages[i].order += amount;
-		}
-	}
+	_movePartPages(start, end, amount);
 	
 	#ifdef DEBUG_PAGES
 		showPages();
 	#endif
+}
+
+
+void _movePartPages(const size_t start, const size_t end, const int amount)
+{
+	for (size_t i = 0; i < pg_count; i++)
+	{
+		if (pages[i].order >= start && pages[i].order <= end) {
+			pages[i].order += amount;
+			pages[i].changed = true;
+		}
+	}
 }
 
