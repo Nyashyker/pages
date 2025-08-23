@@ -3,8 +3,8 @@
 /* # ZAPLANOVANO #
  * Funkciji:
  * - number
- * - order
- * - move
+ * + order
+ * + move
  * - konvertacija ffnpeg-om
  * Osoblyvosti:
  * - dovžyna
@@ -18,7 +18,6 @@ int main(const int argc, const char *const *const argv)
 		return 1;
 	}
 	openPages(argv[1], argv[2]);
-	movePartPages(3, 9, 10);
 	closePages();
 
 	return 0;

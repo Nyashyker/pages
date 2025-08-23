@@ -11,4 +11,6 @@ void closePages();
 
 // `start` та `end` мають бути дійсними номерами сторінок
 void movePartPages(const size_t start, const size_t end, const int amount);
+// `start` буде дійсним номером сторінки
+void orderlinePages(const size_t start);
 

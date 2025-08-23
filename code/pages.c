@@ -3,6 +3,7 @@
 #define DEBUG_PAGES
 
 #include <stdint.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -237,6 +238,32 @@ void movePartPages(const size_t start, const size_t end, const int amount)
 	#endif
 	_movePartPages(start, end, amount);
 	
+	#ifdef DEBUG_PAGES
+		showPages();
+	#endif
+}
+
+void orderlinePages(const size_t start)
+{
+	if (pg_count == 0) { fprintf(stderr, "ERROR: The pages are not set!\n"); return; }
+	#ifdef DEBUG_PAGES
+		printf("\tOrderlining pages to start from %zu\n", start);
+	#endif
+
+	size_t the_index = 0;
+	int the_last_smallest = INT_MIN;
+	for (size_t order = start; order < start + pg_count; order++) {
+		int the_smallest = INT_MAX;
+		for (size_t i = 0; i < pg_count; i++) {
+			if (pages[i].order > the_last_smallest && pages[i].order < the_smallest) {
+				the_index = i;
+				the_smallest = pages[i].order;
+			}
+		}
+		the_last_smallest = the_smallest;
+		pages[the_index].order = order;
+		pages[the_index].changed = true;
+	}
 	#ifdef DEBUG_PAGES
 		showPages();
 	#endif
